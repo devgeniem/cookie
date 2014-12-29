@@ -19,6 +19,7 @@ exports.serialize = serialize;
 
 var decode = decodeURIComponent;
 var encode = encodeURIComponent;
+var RE_SEP = /; */;
 
 /**
  * Parse a cookie header.
@@ -33,32 +34,33 @@ var encode = encodeURIComponent;
  */
 
 function parse(str, options) {
-  var obj = {}
-  var opt = options || {};
-  var pairs = str.split(/; */);
-  var dec = opt.decode || decode;
+  var pairs = str.split(RE_SEP),
+      dec = (options && options.decode) || decode,
+      obj = {},
+      pair,
+      key,
+      val,
+      eq;
 
-  pairs.forEach(function(pair) {
-    var eq_idx = pair.indexOf('=')
+  for (var i = 0, len = pairs.length; i < len; ++i) {
+    pair = pairs[i];
+    eq = pair.indexOf('=');
 
-    // skip things that don't look like key=value
-    if (eq_idx < 0) {
-      return;
+    if (~eq) {
+      key = pair.substring(0, eq);
+      val = pair.substring(++eq);
+
+      if (val[0] === '"')
+        val = val.slice(1, -1);
+
+      if (obj[key] === undefined) {
+        if (~val.indexOf('%'))
+          obj[key] = tryDecode(val, dec);
+        else
+          obj[key] = val;
+      }
     }
-
-    var key = pair.substr(0, eq_idx).trim()
-    var val = pair.substr(++eq_idx, pair.length).trim();
-
-    // quoted values
-    if ('"' == val[0]) {
-      val = val.slice(1, -1);
-    }
-
-    // only assign once
-    if (undefined == obj[key]) {
-      obj[key] = tryDecode(val, dec);
-    }
-  });
+  }
 
   return obj;
 }
@@ -80,23 +82,41 @@ function parse(str, options) {
  */
 
 function serialize(name, val, options) {
-  var opt = options || {};
-  var enc = opt.encode || encode;
-  var pairs = [name + '=' + enc(val)];
+  var enc = (options && options.encode) || encode,
+      ret,
+      val;
 
-  if (null != opt.maxAge) {
-    var maxAge = opt.maxAge - 0;
-    if (isNaN(maxAge)) throw new Error('maxAge should be a Number');
-    pairs.push('Max-Age=' + maxAge);
+  ret = name;
+  ret += '=';
+  ret += enc(val);
+
+  if (options) {
+    if (options.maxAge != null) {
+      var maxAge = options.maxAge - 0;
+      if (isNaN(maxAge))
+        throw new Error('maxAge should be a Number');
+      ret += '; Max-Age=';
+      ret += maxAge;
+    }
+    if (val = options.domain) {
+      ret += '; Domain=';
+      ret += val;
+    }
+    if (val = options.path) {
+      ret += '; Path=';
+      ret += val;
+    }
+    if (val = options.expires) {
+      ret += '; Expires=';
+      ret += val.toUTCString();
+    }
+    if (options.httpOnly)
+      ret += '; HttpOnly';
+    if (options.secure)
+      ret += '; Secure';
   }
 
-  if (opt.domain) pairs.push('Domain=' + opt.domain);
-  if (opt.path) pairs.push('Path=' + opt.path);
-  if (opt.expires) pairs.push('Expires=' + opt.expires.toUTCString());
-  if (opt.httpOnly) pairs.push('HttpOnly');
-  if (opt.secure) pairs.push('Secure');
-
-  return pairs.join('; ');
+  return ret;
 }
 
 /**
