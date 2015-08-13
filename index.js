@@ -93,6 +93,10 @@ function serialize(name, val, options) {
     if (isNaN(maxAge)) throw new Error('maxAge should be a Number');
     pairs.push('Max-Age=' + maxAge);
   }
+  
+  //bug fix opt.expires is not always date!!!
+  if (typeof opt.expires == 'number')
+        opt.expires = new Date(opt.expires);
 
   if (opt.domain) pairs.push('Domain=' + opt.domain);
   if (opt.path) pairs.push('Path=' + opt.path);
